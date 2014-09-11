@@ -1,3 +1,9 @@
+"""
+Class for interfacing with OrientDB from Python 2.7. The motivation for
+this project is to have a very simple client that doesn't rely on
+the Tinkerpop stack, and just uses the SQL-like language for OrientDB.
+"""
+
 import requests
 import urllib2
 import gzip
