@@ -9,7 +9,7 @@ import urllib2
 import gzip
 from StringIO import StringIO
 import global_config as gc
-
+import json
 
 class AuthenticationError(Exception):
     """Error when the server doesn't accept the user's authentication.
@@ -22,7 +22,24 @@ class AuthenticationError(Exception):
         return repr(self.value)
 
 
-def paginate(f, *args):
+class OrientDBResponseError(Exception):
+    """Error when the OrientDB server doesn't give us a 2XX response
+       code.
+    """
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+
+def response_code_okay(response):
+    """Checks the requests response to see if the response code is in
+       the 200's, signifying that all is well.
+    """
+    code = response.status_code
+    return str(code)[0] == '2'
+
+def _paginate(f, *args):
     """Decorator for mimicking a cursor object. OrientDB does not have
        cursor objects for paging through results. This decorator can be
        wrapped around a function which returns one set of results.
@@ -41,7 +58,7 @@ def paginate(f, *args):
     return inner_function
 
 
-@paginate
+@_paginate
 def _select_from(db_connection, target, where_clause, skip=0):
     """Selects (using the SQL-like language) from the database.
 
@@ -62,7 +79,7 @@ def _select_from(db_connection, target, where_clause, skip=0):
     return result_list
 
 
-@paginate
+@_paginate
 def _get_query(db_connection, query_text, language, skip=0):
     """Uses the GET method to execute a query. Note that in the orientDB
        scheme, GET requests are "idempotent", meaning that they don't
@@ -172,6 +189,17 @@ class OrientDBConnection(object):
         response = requests.get(request_url, cookies=self.auth_cookie)
         return response
 
+    def update_document(self, record_id, payload, update_mode='full'):
+        """Updates a document by its record-id. Payload is a dictionary.
+           Returns the response from the sever."""
+        record_id = record_id.replace('#', '')
+        payload = json.dumps(payload)
+        request_url = '/'.join([
+            self.server_address, 'document', self.database, record_id])
+        response = requests.post(
+            request_url, cookies=self.auth_cookie, data=payload)
+        return response
+
     def export_database(self, file_name):
         """Exports the database in JSON format to ``file_name``. Uses the
            filename extension to guess what type of file you want to export."""
@@ -191,18 +219,28 @@ class OrientDBConnection(object):
             raise NotImplementedError(
                 "Unable to infer output filetype from name.")
 
+    def class_information(self, class_name):
+        """Returns information about the requested class."""
+        request_url = '/'.join([
+            self.server_address, 'class', self.database, class_name])
+        response = requests.get(request_url, cookies=self.auth_cookie)
+        return response.json()
+
 
 def main():
     orient_connection = OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database=gc.DATABASE)
-
-    # info = orient_connection.database_info()
-    # import pdb; pdb.set_trace()
     for i in orient_connection.select_from('v', "type = 'artist'"):
         print i
         document = orient_connection.get_document(i['@rid'])
         print document
+    experiment_payload = {
+        'foo': 'baz', u'name': u'Willie_Cobb', u'type': u'artist',
+        u'@rid': u'#9:807', u'in_written_by': u'#9:806', u'@version': 4,
+        u'@type': u'd', u'@class': u'V'}
+    orient_connection.update_document('#9:807', experiment_payload)
+    class_info = orient_connection.class_information('V')
     # print list(orient_connection.post_command("update Artist set online = false"))
     # orient_connection.post_command("""gremlin('g = new OrientGraph("remote:localhost/GratefulDeadConcerts")')""", '')
     #for i in orient_connection.get_query("SELECT EXPAND(gremlin('g.V.count()'))", 'sql'):
