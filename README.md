@@ -7,6 +7,7 @@ with Python's requests library.
 Goals
 -----
 The goals for this project are to create a client meeting these criteria:
+
 1 It should not require a complex software stack, such as Tinkerpop (which
   is great, but may not always be available).
 + It should support the entire SQL-like language that's built into OrientDB.
