@@ -21,9 +21,26 @@ The goals for this project are to create a client meeting these criteria:
 
 Usage
 -----
-Import py2orientdb and create an OrientDBConnection object.
+Import py2orientdb and create an OrientDBConnection object:
+
 ~~~~{.python}
-for i in range(10):
-    print i
+import py2orientdb
+
+DATABASE = 'GratefulDeadConcerts'
+PASSWORD = '*******'
+USER = 'root'
+SERVER = 'http://localhost'
+PORT = 2480
+
+orient_connection = py2orientdbOrientDBConnection(
+    orientdb_address=SERVER, orientdb_port=PORT,
+    user=USER, password=PASSWORD, database=DATABASE)
 ~~~~
 
+Then use the OrientDBConnection methods to query the database:
+
+~~~~{.python}
+for i in orient_connection.select_from('v', "type = 'artist'"):
+    document = orient_connection.get_document(i['@rid'])
+    print document
+~~~~
