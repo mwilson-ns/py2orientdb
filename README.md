@@ -4,6 +4,9 @@ This is a work in progress. It will be a very simple, minimal client for
 interacting with OrientDB from Python 2.7, using OrientDB's REST interface
 with Python's requests library.
 
+If there was a Greek letter before alpha, I'd have used that letter to
+describe the current state of this code.
+
 Goals
 -----
 The goals for this project are to create a client meeting these criteria:
@@ -15,4 +18,12 @@ The goals for this project are to create a client meeting these criteria:
 + There should be simple, intuitive methods to facilitate common SQL commands,
   combined with more general methods for passing arbitrary commands to the
   database.
+
+Usage
+-----
+Import py2orientdb and create an OrientDBConnection object.
+~~~~{.python}
+for i in range(10):
+    print i
+~~~~
 
