@@ -10,6 +10,8 @@ import gzip
 from StringIO import StringIO
 import global_config as gc
 import json
+import copy
+
 
 class AuthenticationError(Exception):
     """Error when the server doesn't accept the user's authentication.
@@ -32,13 +34,6 @@ class OrientDBResponseError(Exception):
         return repr(self.value)
 
 
-def response_code_okay(response):
-    """Checks the requests response to see if the response code is in
-       the 200's, signifying that all is well.
-    """
-    code = response.status_code
-    return str(code)[0] == '2'
-
 def _paginate(f, *args):
     """Decorator for mimicking a cursor object. OrientDB does not have
        cursor objects for paging through results. This decorator can be
@@ -58,7 +53,37 @@ def _paginate(f, *args):
     return inner_function
 
 
-@_paginate
+def _check_response_code(f, *args, **kwargs):
+    """Decorator that checks the requests response to see if the response
+       code is in the 200's, signifying that all is well. If not, raises
+       an OrientDBResponseError.
+    """
+    def inner_function(*args, **kwargs):
+        out = f(*args, **kwargs)
+        code = out.status_code
+        print 'in the decorator...', code
+        if str(code)[0] != '2':
+            raise OrientDBResponseError
+        else:
+            return out
+    return inner_function
+
+
+@_check_response_code
+def _update_document(db_connection, record_id, payload, update_mode='full'):
+    """Updates a document by its record-id. Payload is a dictionary.
+       Returns the response from the sever."""
+    record_id = record_id.replace('#', '')
+    payload = json.dumps(payload)
+    request_url = '/'.join([
+        db_connection.server_address, 'document',
+        db_connection.database, record_id])
+    response = requests.post(
+        request_url, cookies=db_connection.auth_cookie, data=payload)
+    return response
+
+
+# @_paginate
 def _select_from(db_connection, target, where_clause, skip=0):
     """Selects (using the SQL-like language) from the database.
 
@@ -98,6 +123,7 @@ def _get_query(db_connection, query_text, language, skip=0):
     response = requests.get(request_url, cookies=db_connection.auth_cookie)
     result_list = response.json()['result']
     return result_list
+
 
 class OrientDBConnection(object):
     """Class for interfacing with OrientDB via REST interface"""
@@ -188,16 +214,12 @@ class OrientDBConnection(object):
                                 self.database])
         response = requests.get(request_url, cookies=self.auth_cookie)
         return response
-
+    
     def update_document(self, record_id, payload, update_mode='full'):
         """Updates a document by its record-id. Payload is a dictionary.
            Returns the response from the sever."""
-        record_id = record_id.replace('#', '')
-        payload = json.dumps(payload)
-        request_url = '/'.join([
-            self.server_address, 'document', self.database, record_id])
-        response = requests.post(
-            request_url, cookies=self.auth_cookie, data=payload)
+        response = _update_document(
+            self, record_id, payload, update_mode='full')
         return response
 
     def export_database(self, file_name):
@@ -226,30 +248,46 @@ class OrientDBConnection(object):
         response = requests.get(request_url, cookies=self.auth_cookie)
         return response.json()
 
+    def create_vertex_class(self, class_name):
+        """Creates a new class that extends the built-in Vertex class.
+           Does not check whether it exists already.
+        """
+        self.post_command('create class %s extends V' % (class_name))
+
+    def create_edge_class(self, class_name):
+        """Creates a new class that extends the built-in Edge class
+           Does not check whether it exists already.
+        """
+        self.post_command('create class %s extends E' % (class_name))
+
+    def create_document(self, class_name, document):
+        """Creates a new document of type ``class_name``. Returns the
+           document with the new @rid added.
+        """
+        request_url = '/'.join([
+            self.server_address, 'document', self.database])
+        payload = copy.deepcopy(document)
+        payload['@class'] = class_name
+        payload = json.dumps(payload)
+        response = requests.post(request_url, cookies=self.auth_cookie, data=payload)
+        return response
 
 def main():
     orient_connection = OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database=gc.DATABASE)
     for i in orient_connection.select_from('v', "type = 'artist'"):
-        print i
         document = orient_connection.get_document(i['@rid'])
         print document
     experiment_payload = {
         'foo': 'baz', u'name': u'Willie_Cobb', u'type': u'artist',
         u'@rid': u'#9:807', u'in_written_by': u'#9:806', u'@version': 4,
         u'@type': u'd', u'@class': u'V'}
-    orient_connection.update_document('#9:807', experiment_payload)
-    class_info = orient_connection.class_information('V')
-    # print list(orient_connection.post_command("update Artist set online = false"))
-    # orient_connection.post_command("""gremlin('g = new OrientGraph("remote:localhost/GratefulDeadConcerts")')""", '')
-    #for i in orient_connection.get_query("SELECT EXPAND(gremlin('g.V.count()'))", 'sql'):
-    #    print i
-    #for i in orient_connection.get_query("g.V", 'gremlin'):
-    #    print i
-    # print orient_connection.connections()
-    # import pdb; pdb.set_trace()
-    # orient_connection.export_database('foobar.json')
+    orient_connection.update_document('#9:806', experiment_payload)
+    # orient_connection.create_vertex_class('animal')
+    # new_document = {'name': 'party'}
+    # response = orient_connection.create_document('animal', new_document)
+    # response = orient_connection.select_from('animal', "name = 'drizzle'")
 
 if __name__ == '__main__':
     main()
