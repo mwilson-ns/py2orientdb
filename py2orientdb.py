@@ -1,5 +1,5 @@
 """
-Class for interfacing with OrientDB from Python 2.7. The motivation for
+Module for interfacing with OrientDB from Python 2.7. The motivation for
 this project is to have a very simple client that doesn't rely on
 the Tinkerpop stack, and just uses the SQL-like language for OrientDB.
 """
@@ -8,7 +8,7 @@ import requests
 import urllib2
 import gzip
 from StringIO import StringIO
-import global_config as gc
+import global_config as gc # where I keep my passwords, etc.
 import json
 import copy
 
@@ -32,6 +32,25 @@ class OrientDBResponseError(Exception):
         self.value = value
     def __str__(self):
         return repr(self.value)
+
+
+def _rid_format(rid):
+    """Converts the ``rid`` as specified into a string of the form:
+       #<cluster>:<id>.
+    """
+    if isinstance(rid, str):
+        if rid[0] == '#':
+            return rid
+        else:
+            return '#' + rid
+    if isinstance(rid, list):
+        rid = tuple(rid)
+    if isinstance(rid, tuple):
+        if len(rid) != 2:
+            raise Exception('rid is an iterable of length != 2')
+        rid = '#' + ':'.join(str(rid[0]), str(rid[1]))
+        return rid
+    raise Exception('rid is not a recognized format')
 
 
 def _paginate(f, *args):
@@ -123,6 +142,63 @@ def _get_query(db_connection, query_text, language, skip=0):
     response = requests.get(request_url, cookies=db_connection.auth_cookie)
     result_list = response.json()['result']
     return result_list
+
+
+def dict_to_where_clause(document, record_separator='.'):
+    """Converts a dictionary-like document to a set of constraints suitable
+       for matching in the SQL language.
+    """
+    path_list = []
+    def inner_function(d, keypath=''):
+        for k, v in d.iteritems():
+            if not isinstance(v, dict):
+                if len(keypath) > 0:
+                    path_list.append(record_separator.join([keypath, k]))
+                else:
+                    path_list.append(k)
+                keypath = ''
+            else:
+                if len(keypath) > 0:
+                    inner_function(
+                        v, keypath=record_separator.join([keypath, k]))
+                else:
+                    inner_function(v, keypath=k)
+    inner_function(document)
+    return path_list
+
+
+def flatten_dict(document, record_separator='.'):
+    """Creates a new dictionary by replacing the nested key structure
+       with dot-delimited keypath strings.
+    """
+    path_list = dict_to_where_clause(
+        document, record_separator=record_separator)
+    d = {}
+    for key_path in path_list:
+        v = copy.deepcopy(document)
+        for key in key_path.split(record_separator):
+            v = v[key]
+        d[key_path] = v
+    return d
+
+def where_clause(document):
+    """Takes a possibly nested dictionary and returns the "where" clause of
+       a SQL command that matches the dictionary's key/value pairs.
+    """
+    if len(document) == 0:
+        raise Exception(
+            'tried to create a where clause from empty dictionary.')
+    clause = ''
+    flattened_dictionary = flatten_dict(document)
+    for k, v in flattened_dictionary.iteritems():
+        if isinstance(v, str):
+            v = '"' + v + '"'
+        else:
+            v = str(v)
+        clause += '%s = %s, ' % (k, v)
+    clause = clause[:-2] # get rid of the extra comma and space
+    clause = 'where ' + clause
+    return clause
 
 
 class OrientDBConnection(object):
@@ -272,18 +348,63 @@ class OrientDBConnection(object):
         response = requests.post(request_url, cookies=self.auth_cookie, data=payload)
         return response
 
+    def create_edge(self, source_id, target_id, subclass='E', content=None):
+        """Creates an edge from the vertex with 'source_id' to the vertex
+           with 'target_id'. If specified, the edge will in in class
+           ``subclass`` and contain the document in the ``content``
+           dictionary. As a convenience, we also check whether the ids have
+           a "#' in front of them, adding it if they don't.
+        """
+        if source_id[0] != '#':
+            source_id = '#' + source_id
+        if target_id[0] != '#':
+            target_id = '#' + target_id
+        command_text = 'create edge %s from %s to %s' % (
+            subclass, source_id, target_id)
+        if content is not None:
+            content = json.dumps(content)
+            command_text = ' '.join([command_text, 'content', content])
+        # print 'command:', command_text
+        response = self.post_command(command_text)
+        return response
+
+    def create_vertex(self, subclass='V', content=None, ignore=False):
+        """Create a vertex with the given content. If ``ignore`` is set, then
+           fail silently if there is already a vertex with the same content.
+        """
+        command_text = 'create vertex %s' %(subclass)
+        if content is not None:
+            content = json.dumps(content)
+            command_text = ' '.join([command_text, 'content', content])
+        print 'command:', command_text
+        response = self.post_command(command_text)
+        return response
+
+# {u'name': u'Pigpen_Weir', u'in_sung_by': [u'#9:69', u'#9:117', u'#9:227', u'#9:66', u'#9:39', u'#9:378', u'#9:634', u'#9:641'], u'@fieldTypes': u'in_sung_by=g', u'@rid': u'#9:258', u'type': u'artist', u'@version': 11, u'@type': u'd', u'@class': u'V'}
+# {u'name': u'Robert_Johnson', u'type': u'artist', u'@rid': u'#9:261', u'in_written_by': u'#9:69', u'@version': 4, u'@type': u'd', u'@class': u'V'}
+
 def main():
     orient_connection = OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database=gc.DATABASE)
     for i in orient_connection.select_from('v', "type = 'artist'"):
-        document = orient_connection.get_document(i['@rid'])
-        print document
+        print i
+        # document = orient_connection.get_document(i['@rid'])
+        # print document
+    import pdb; pdb.set_trace()
     experiment_payload = {
         'foo': 'baz', u'name': u'Willie_Cobb', u'type': u'artist',
         u'@rid': u'#9:807', u'in_written_by': u'#9:806', u'@version': 4,
         u'@type': u'd', u'@class': u'V'}
     orient_connection.update_document('#9:806', experiment_payload)
+    # select in() from Restaurant where name = 'Dante')
+    # def _get_query(db_connection, query_text, language, skip=0):
+    for result in orient_connection.get_query("select in() from V where name = 'Willie_Cobb'", 'sql'):
+        print result
+    # result = orient_connection.create_edge('#9:117', '#9:261')
+    # orient_connection.select_from('v', "")
+    # result = orient_connection.create_edge('%rid1', '%rid2')
+    result = orient_connection.create_vertex(content={'goo': 1, 'goober': 2})
     # orient_connection.create_vertex_class('animal')
     # new_document = {'name': 'party'}
     # response = orient_connection.create_document('animal', new_document)
