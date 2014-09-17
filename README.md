@@ -32,7 +32,7 @@ USER = 'root'
 SERVER = 'http://localhost'
 PORT = 2480
 
-orient_connection = py2orientdbOrientDBConnection(
+orient_connection = py2orientdb.OrientDBConnection(
     orientdb_address=SERVER, orientdb_port=PORT,
     user=USER, password=PASSWORD, database=DATABASE)
 ~~~~
