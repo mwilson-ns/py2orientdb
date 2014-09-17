@@ -19,6 +19,8 @@ The goals for this project are to create a client meeting these criteria:
   combined with more general methods for passing arbitrary commands to the
   database.
 
+Afte we've got SQL working, we'll start working on suport for Gremlin.
+
 Usage
 -----
 Import py2orientdb and create an OrientDBConnection object:
@@ -44,3 +46,8 @@ for i in orient_connection.select_from('v', "type = 'artist'"):
     document = orient_connection.get_document(i['@rid'])
     print document
 ~~~~
+
+If you look at the main method of py2orientdb.py, you'll see that I've
+imported a file called global_config.py, which does nothing but contain
+the password, server address, and other configuration information that's
+needed to construct the OrientDBConnection object.

@@ -144,7 +144,7 @@ def _get_query(db_connection, query_text, language, skip=0):
     return result_list
 
 
-def dict_to_where_clause(document, record_separator='.'):
+def get_path_list_from_dict(document, record_separator='.'):
     """Converts a dictionary-like document to a set of constraints suitable
        for matching in the SQL language.
     """
@@ -171,7 +171,7 @@ def flatten_dict(document, record_separator='.'):
     """Creates a new dictionary by replacing the nested key structure
        with dot-delimited keypath strings.
     """
-    path_list = dict_to_where_clause(
+    path_list = get_path_list_from_dict(
         document, record_separator=record_separator)
     d = {}
     for key_path in path_list:
@@ -187,13 +187,14 @@ def where_clause(document):
     """
     if len(document) == 0:
         raise Exception(
-            'tried to create a where clause from empty dictionary.')
+            'tried to create a WHERE clause from an empty dictionary.')
     clause = ''
     flattened_dictionary = flatten_dict(document)
     for k, v in flattened_dictionary.iteritems():
-        if isinstance(v, str):
+        if isinstance(v, str) or isinstance(v, unicode):
             v = '"' + v + '"'
         else:
+            print v, 'is type', type(v)
             v = str(v)
         clause += '%s = %s, ' % (k, v)
     clause = clause[:-2] # get rid of the extra comma and space
@@ -391,11 +392,13 @@ def main():
         print i
         # document = orient_connection.get_document(i['@rid'])
         # print document
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
     experiment_payload = {
         'foo': 'baz', u'name': u'Willie_Cobb', u'type': u'artist',
         u'@rid': u'#9:807', u'in_written_by': u'#9:806', u'@version': 4,
         u'@type': u'd', u'@class': u'V'}
+    w = where_clause(experiment_payload)
+    import pdb; pdb.set_trace()
     orient_connection.update_document('#9:806', experiment_payload)
     # select in() from Restaurant where name = 'Dante')
     # def _get_query(db_connection, query_text, language, skip=0):
@@ -404,7 +407,7 @@ def main():
     # result = orient_connection.create_edge('#9:117', '#9:261')
     # orient_connection.select_from('v', "")
     # result = orient_connection.create_edge('%rid1', '%rid2')
-    result = orient_connection.create_vertex(content={'goo': 1, 'goober': 2})
+    # result = orient_connection.create_vertex(content={'goo': 1, 'goober': 2})
     # orient_connection.create_vertex_class('animal')
     # new_document = {'name': 'party'}
     # response = orient_connection.create_document('animal', new_document)
