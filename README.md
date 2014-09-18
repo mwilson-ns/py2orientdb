@@ -1,23 +1,26 @@
 py2orientdb
 ===========
-This is a work in progress. It will be a very simple, minimal client for
+This is a work in progress. It will be a very simple client for
 interacting with OrientDB from Python 2.7, using OrientDB's REST interface
-with Python's requests library.
-
-If there was a Greek letter before alpha, I'd have used that letter to
-describe the current state of this code.
+with Python's requests library. The main goal is to create a client that
+does not require other libraries like Tinkerpop, and which enables a user
+who is familiar with SQL to create and query an OrientDB graph easily.
 
 Goals
 -----
-The goals for this project are to create a client meeting these criteria:
+The goals for this project are to create a client that:
 
-+ It should not require a complex software stack, such as Tinkerpop (which
++ does not require a complex software stack, such as Tinkerpop (which
   is great, but may not always be available).
-+ It should support the entire SQL-like language that's built into OrientDB.
-+ Relatively simple graph operations should be made easy.
-+ There should be simple, intuitive methods to facilitate common SQL commands,
-  combined with more general methods for passing arbitrary commands to the
-  database.
++ supports the entire SQL-like language that's built into OrientDB.
++ makes graph operations relatively simple, without requiring external
+  libraries or special configuration.
++ fills-in gaps in functionality of OrientDB that SQL (and other) users
+  are used to having. For example, lack of a cursor object for pagine
+  through results; lack of an equivalent to SQL's "INSERT IGNORE" query.
++ makes it painless to import graphs in common formats.
++ supports and encourages creation of classes in definitions of graphs.
++ supports optimization of indices from within the client.
 
 Usage
 -----
@@ -27,7 +30,7 @@ Import py2orientdb and create an OrientDBConnection object:
 import py2orientdb
 
 DATABASE = 'GratefulDeadConcerts'
-PASSWORD = '*******'
+PASSWORD = 'MY_SUPER_SECRET_PASSWORD'
 USER = 'root'
 SERVER = 'http://localhost'
 PORT = 2480
@@ -44,3 +47,13 @@ for i in orient_connection.select_from('v', "type = 'artist'"):
     document = orient_connection.get_document(i['@rid'])
     print document
 ~~~~
+
+To do list
+----------
++ Unit testing
++ Sphinx documentation
++ Error handling with more informative exceptions
++ Extra authentication for database-level operations (e.g.
+  creating a database, listing databases, etc).
+
+

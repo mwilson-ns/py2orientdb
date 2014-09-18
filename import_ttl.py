@@ -1,6 +1,7 @@
+"""Module for importing compressed ttl files."""
+
 import gzip
 import py2orientdb
-import global_config as gc
 import progressbar
 
 # assumes there is a graph database called "kb"
@@ -22,7 +23,7 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
     print 'done...'
     widgets = [
         'Getting vertices: ', progressbar.Percentage(), ' ',
-        progressbar.Bar(marker=progressbar.RotatingMarker()), ' ',
+        progressbar.Bar('>'), ' ',
         progressbar.ETA(' ')]
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=total_lines).start()
     f = gzip.open(file_name, 'r')
@@ -51,7 +52,7 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
     database_connection.create_class_property('uri', edge_class, 'string')
     widgets = [
         'Creating source vertices: ', progressbar.Percentage(), ' ',
-        progressbar.Bar(marker=progressbar.RotatingMarker()), ' ',
+        progressbar.Bar('>'), ' ',
         progressbar.ETA(' ')]
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(source_set)).start()
     for source in source_set:
@@ -67,7 +68,7 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
     counter = 0
     widgets = [
         'Creating target vertices: ', progressbar.Percentage(), ' ',
-        progressbar.Bar(marker=progressbar.RotatingMarker()), ' ',
+        progressbar.Bar('>'), ' ',
         progressbar.ETA(' ')]
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(target_set)).start()
     for target in target_set:
@@ -84,7 +85,7 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
     counter = 0
     widgets = [
         'Creating edges: ', progressbar.Percentage(), ' ',
-        progressbar.Bar(marker=progressbar.RotatingMarker()), ' ',
+        progressbar.Bar('>'), ' ',
         progressbar.ETA(' ')]
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=total_lines).start()
     for line in f:
@@ -107,5 +108,6 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
     pbar.finish()
 
 if __name__ == '__main__':
+    import global_config as gc
     import_ttl_file(gc.ARTICLE_CATEGORIES_FILE, 'article', 'category', 'in_category', test_only=False)
 
