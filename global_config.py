@@ -1,6 +1,5 @@
 ORIENTDB_URL = 'http://localhost:2480'
 DATABASE = 'GratefulDeadConcerts'
-# PASSWORD = '689CEE8B1EFF653532AEF915143A52BC322ECBB2BE722B2AE468764E8E20D5A4'
 PASSWORD = '*************************'
 LANGUAGE = 'sql'
 USER = 'root'
