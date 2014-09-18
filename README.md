@@ -64,4 +64,3 @@ If you look at the main method of py2orientdb.py, you'll see that I've
 imported a file called global_config.py, which does nothing but contain
 the password, server address, and other configuration information that's
 needed to construct the OrientDBConnection object.
->>>>>>> master
