@@ -103,7 +103,7 @@ def _update_document(db_connection, record_id, payload, update_mode='full'):
 
 
 # @_paginate
-def _select_from(db_connection, target, where_clause_dict, skip=0):
+def _select_from(db_connection, target, where, skip=0):
     """Selects (using the SQL-like language) from the database.
 
        Using a private method outside the class definition because we
@@ -113,16 +113,17 @@ def _select_from(db_connection, target, where_clause_dict, skip=0):
        In these cases, there will always be a class method that calls
        the private method, and iterates through the results.
     """
-    raw_query_text = 'SELECT FROM %s WHERE %s SKIP %s' % (
-        target, where_clause_dict, skip)
+    # raw_query_text = 'SELECT FROM %s WHERE %s SKIP %s' % (
+    #     target, where_clause_dict, skip)
     # print raw_query_text
-    query_text = urllib2.quote(raw_query_text)
+    query_text = urllib2.quote(where)
     request_url = '/'.join([db_connection.server_address, 'query',
                             db_connection.database, 'sql', query_text])
     response = requests.get(request_url, cookies=db_connection.auth_cookie)
     try:
         result_list = response.json()['result']
-    except ValueError:
+    except ValueError as e:
+        print 'got a ValueError'
         result_list = []
     return result_list
 
@@ -142,7 +143,6 @@ def _get_query(db_connection, query_text, language, skip=0):
     query_text += ' skip=%s' % (skip)
     request_url = '/'.join([db_connection.server_address, 'query',
                             db_connection.database, language, query_text])
-    # print request_url
     response = requests.get(request_url, cookies=db_connection.auth_cookie)
     result_list = response.json()['result']
     return result_list
@@ -198,10 +198,10 @@ def where_clause(document):
         if isinstance(v, str) or isinstance(v, unicode):
             v = '"' + v + '"'
         else:
-            print v, 'is type', type(v)
+            # print v, 'is type', type(v)
             v = str(v)
-        clause += '%s = %s, ' % (k, v)
-    clause = clause[:-2] # get rid of the extra comma and space
+        clause += '%s = %s AND ' % (k, v)
+    clause = clause[:-5] # get rid of the extra comma and space
     # clause = 'where ' + clause
     return clause
 
@@ -265,7 +265,7 @@ class OrientDBConnection(object):
         """Check whether an edge or vertex exists containing the document.
            Change this so that it returns a boolean"""
         where = where_clause(document)
-        return self.select_from(graph_class, where)
+        return len(list(self.select_from(graph_class, where))) > 0
 
     def get_document(self, record_id):
         """Retrieves one document with the given record_id. The record_id
@@ -341,7 +341,10 @@ class OrientDBConnection(object):
         """Creates a new class that extends the built-in Vertex class.
            Does not check whether it exists already.
         """
-        self.post_command('create class %s extends V' % (class_name))
+        print 'creating vertex class:', class_name
+        r = self.post_command('create class %s extends V' % (class_name))
+        # print r.content
+        # import pdb; pdb.set_trace()
 
     def create_edge_class(self, class_name):
         """Creates a new class that extends the built-in Edge class
@@ -397,26 +400,44 @@ class OrientDBConnection(object):
         """Create a vertex with the given content. If ``ignore`` is set, then
            fail silently if there is already a vertex with the same content.
         """
-        if ignore:
-            pass # check whether vertex with the same content exists
-                 # if so, just return
+        if ignore and self.check_exists(subclass, content):
+            return
         command_text = 'create vertex %s' % (subclass)
         if content is not None:
             content = json.dumps(content)
             command_text = ' '.join([command_text, 'content', content])
-        # print 'command:', command_text
+        print 'command:', command_text
         response = self.post_command(command_text)
         return response
 
-# {u'name': u'Pigpen_Weir', u'in_sung_by': [u'#9:69', u'#9:117', u'#9:227', u'#9:66', u'#9:39', u'#9:378', u'#9:634', u'#9:641'], u'@fieldTypes': u'in_sung_by=g', u'@rid': u'#9:258', u'type': u'artist', u'@version': 11, u'@type': u'd', u'@class': u'V'}
-# {u'name': u'Robert_Johnson', u'type': u'artist', u'@rid': u'#9:261', u'in_written_by': u'#9:69', u'@version': 4, u'@type': u'd', u'@class': u'V'}
+
+    def vertex_connections(
+            self, rid_source, rid_target, subclass='E',
+            additional_constraints={}):
+        """Yield all the edges connecting two vertices with the given rids"""
+        rid_source = _rid_format(rid_source)
+        rid_target = _rid_format(rid_target)
+        payload = {'in': rid_target, 'out': rid_source}
+        for k, v in additional_constraints.iteritems():
+            payload[k] = v
+        where = where_clause(payload)
+        query_text = """SELECT uri FROM %s WHERE %s""" % (subclass, where) 
+        print 'vertex_connections query_text:', query_text
+        for i in self.select_from('e', query_text):
+            yield i
 
 def main():
     orient_connection = OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database=gc.DATABASE)
-    for i in orient_connection.select_from('v', "type = 'artist'"):
+    # orient_connection.vertex_connections('11:2619', '12:5393')
+    # _select_from(db_connection, target, where, skip=0):
+    for i in orient_connection.vertex_connections('#11:2619', '#12:5393'):
         print i
+    # _select_from(orient_connection, 'e', '''SELECT FROM E WHERE in = "#12:5393" AND out = "#11:2619"''')
+    # exit()
+    # for i in orient_connection.select_from('v', "type = 'artist'"):
+    #     print i
         # document = orient_connection.get_document(i['@rid'])
         # print document
     # import pdb; pdb.set_trace()
@@ -424,13 +445,13 @@ def main():
         'foo': 'baz', u'name': u'Willie_Cobb', u'type': u'artist',
         u'@rid': u'#9:807', u'in_written_by': u'#9:806', u'@version': 4,
         u'@type': u'd', u'@class': u'V'}
-    w = where_clause(experiment_payload)
-    import pdb; pdb.set_trace()
-    orient_connection.update_document('#9:806', experiment_payload)
+    # w = where_clause(experiment_payload)
+    # import pdb; pdb.set_trace()
+    # orient_connection.update_document('#9:806', experiment_payload)
     # select in() from Restaurant where name = 'Dante')
     # def _get_query(db_connection, query_text, language, skip=0):
-    for result in orient_connection.get_query("select in() from V where name = 'Willie_Cobb'", 'sql'):
-        print result
+    # for result in orient_connection.get_query("select in() from V where name = 'Willie_Cobb'", 'sql'):
+    #     print result
     # result = orient_connection.create_edge('#9:117', '#9:261')
     # orient_connection.select_from('v', "")
     # result = orient_connection.create_edge('%rid1', '%rid2')

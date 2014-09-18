@@ -60,10 +60,7 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
         if counter % 100 == 0:
             pbar.update(counter)
         d = {'uri': source}
-        if len(list(database_connection.check_exists(source_class, d))) > 0:
-            pass # we already have the vertex
-        else:
-            database_connection.create_vertex(subclass=source_class, content=d)
+        database_connection.create_vertex(subclass=source_class, content=d, ignore=True)
     pbar.finish()
     counter = 0
     widgets = [
@@ -76,10 +73,7 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
         if counter % 100 == 0:
             pbar.update(counter)
         d = {'uri': target}
-        if len(list(database_connection.check_exists(target_class, d))) > 0:
-            pass
-        else:
-            database_connection.create_vertex(subclass=target_class, content=d)
+        database_connection.create_vertex(subclass=target_class, content=d, ignore=True)
     pbar.finish()
     f = gzip.open(file_name, 'r')
     counter = 0

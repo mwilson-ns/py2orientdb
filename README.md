@@ -16,7 +16,7 @@ The goals for this project are to create a client that:
 + makes graph operations relatively simple, without requiring external
   libraries or special configuration.
 + fills-in gaps in functionality of OrientDB that SQL (and other) users
-  are used to having. For example, lack of a cursor object for pagine
+  are used to having. For example, lack of a cursor object for paging
   through results; lack of an equivalent to SQL's "INSERT IGNORE" query.
 + makes it painless to import graphs in common formats.
 + supports and encourages creation of classes in definitions of graphs.
