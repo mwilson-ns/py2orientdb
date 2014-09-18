@@ -58,8 +58,8 @@ To do list
 + Extra authentication for database-level operations (e.g.
   creating a database, listing databases, etc).
 
-
-=======
+Notes
+-----
 If you look at the main method of py2orientdb.py, you'll see that I've
 imported a file called global_config.py, which does nothing but contain
 the password, server address, and other configuration information that's
