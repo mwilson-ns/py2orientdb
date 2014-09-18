@@ -9,7 +9,7 @@ import progressbar
 # orientdb {kb}> CREATE INDEX article_uri ON article (uri) dictionary_hash_index
 # add index creation to py2orientdb as a generic post command
 
-def import_ttl_file(file_name, source_class, target_class, edge_class, test_only=True):
+def import_ttl_file(file_name, source_class, target_class, edge_class, test_only=False):
     database_connection = py2orientdb.OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database='kb')
@@ -49,6 +49,10 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
     database_connection.create_class_property('uri', source_class, 'string')
     database_connection.create_class_property('uri', target_class, 'string')
     database_connection.create_class_property('uri', edge_class, 'string')
+    widgets = [
+        'Creating source vertices: ', progressbar.Percentage(), ' ',
+        progressbar.Bar(marker=progressbar.RotatingMarker()), ' ',
+        progressbar.ETA(' ')]
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(source_set)).start()
     for source in source_set:
         counter += 1
@@ -56,13 +60,15 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
             pbar.update(counter)
         d = {'uri': source}
         if len(list(database_connection.check_exists(source_class, d))) > 0:
-            pass
-            #print 'allegedly have the source already...', counter, len(source_set)
+            pass # we already have the vertex
         else:
             database_connection.create_vertex(subclass=source_class, content=d)
-            #print 'allegedly created source', source, counter, len(source_set)
     pbar.finish()
     counter = 0
+    widgets = [
+        'Creating target vertices: ', progressbar.Percentage(), ' ',
+        progressbar.Bar(marker=progressbar.RotatingMarker()), ' ',
+        progressbar.ETA(' ')]
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(target_set)).start()
     for target in target_set:
         counter += 1
@@ -71,13 +77,15 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
         d = {'uri': target}
         if len(list(database_connection.check_exists(target_class, d))) > 0:
             pass
-            # print 'allegedly have the target already...', counter, len(target_set)
         else:
             database_connection.create_vertex(subclass=target_class, content=d)
-            # print 'allegedly created target', target, counter, len(target_set)
     pbar.finish()
     f = gzip.open(file_name, 'r')
     counter = 0
+    widgets = [
+        'Creating edges: ', progressbar.Percentage(), ' ',
+        progressbar.Bar(marker=progressbar.RotatingMarker()), ' ',
+        progressbar.ETA(' ')]
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=total_lines).start()
     for line in f:
         counter += 1
@@ -91,8 +99,6 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
                 source_class, {'uri': source}))[0]['@rid']
             target_rid = list(database_connection.select_from(
                 target_class, {'uri': target}))[0]['@rid']
-            # print source_rid, '-->', edge, target_rid
-            # import pdb; pdb.set_trace()
         except:
             pass
         database_connection.create_edge(

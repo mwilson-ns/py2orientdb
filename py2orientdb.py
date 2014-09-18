@@ -390,6 +390,8 @@ class OrientDBConnection(object):
         response = requests.post(request_url, cookies=self.auth_cookie)
         return response
 
+    # TODO: Fill in routine to check whether vertex exists already
+    #       Use the "check_exists" method.
     def create_vertex(self, subclass='V', content=None, ignore=False):
         """Create a vertex with the given content. If ``ignore`` is set, then
            fail silently if there is already a vertex with the same content.
