@@ -34,6 +34,15 @@ class OrientDBResponseError(Exception):
         return repr(self.value)
 
 
+def generator_empty(g):
+    """Returns True if the generator is empty; False otherwise."""
+    sentinal = True
+    for i in g:
+        sentinal = False
+        break
+    return sentinal
+
+
 def _rid_format(rid):
     """Converts the ``rid`` as specified into a string of the form:
        #<cluster>:<id>.
@@ -410,11 +419,11 @@ class OrientDBConnection(object):
         response = self.post_command(command_text)
         return response
 
-
     def vertex_connections(
             self, rid_source, rid_target, subclass='E',
             additional_constraints={}):
-        """Yield all the edges connecting two vertices with the given rids"""
+        """Yield all the edges connecting two vertices with the given rids.
+           Additional constraints can be added to the optional dictionary."""
         rid_source = _rid_format(rid_source)
         rid_target = _rid_format(rid_target)
         payload = {'in': rid_target, 'out': rid_source}
@@ -422,9 +431,21 @@ class OrientDBConnection(object):
             payload[k] = v
         where = where_clause(payload)
         query_text = """SELECT uri FROM %s WHERE %s""" % (subclass, where) 
-        print 'vertex_connections query_text:', query_text
+        # print 'vertex_connections query_text:', query_text
         for i in self.select_from('e', query_text):
             yield i
+
+    def vertices_connected(
+            self, rid_source, rid_target, subclass='E',
+            additional_constraints={}):
+        """Returns a boolean, which is whether there is an edge connecting
+           the two vertices with the given rids.
+        """
+        return not generator_empty(
+            self.vertex_connections(
+                rid_source, rid_target, subclass=subclass,
+                additional_constraints=additional_constraints))
+
 
 def main():
     orient_connection = OrientDBConnection(
@@ -434,6 +455,7 @@ def main():
     # _select_from(db_connection, target, where, skip=0):
     for i in orient_connection.vertex_connections('#11:2619', '#12:5393'):
         print i
+    print orient_connection.vertices_connected('#11:2619', '#12:5393')
     # _select_from(orient_connection, 'e', '''SELECT FROM E WHERE in = "#12:5393" AND out = "#11:2619"''')
     # exit()
     # for i in orient_connection.select_from('v', "type = 'artist'"):
@@ -460,6 +482,7 @@ def main():
     # new_document = {'name': 'party'}
     # response = orient_connection.create_document('animal', new_document)
     # response = orient_connection.select_from('animal', "name = 'drizzle'")
+
 
 if __name__ == '__main__':
     main()
