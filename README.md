@@ -22,6 +22,8 @@ The goals for this project are to create a client that:
 + supports and encourages creation of classes in definitions of graphs.
 + supports optimization of indices from within the client.
 
+Afte we've got SQL working, we'll start working on suport for Gremlin.
+
 Usage
 -----
 Import py2orientdb and create an OrientDBConnection object:
@@ -57,3 +59,9 @@ To do list
   creating a database, listing databases, etc).
 
 
+=======
+If you look at the main method of py2orientdb.py, you'll see that I've
+imported a file called global_config.py, which does nothing but contain
+the password, server address, and other configuration information that's
+needed to construct the OrientDBConnection object.
+>>>>>>> master
