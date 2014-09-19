@@ -221,6 +221,15 @@ def where_clause(document):
     return clause
 
 
+def _vertex_parse(vertex_string):
+    """Takes a string representation of a vertex and breaks it down into
+       its components."""
+    d = {}
+    d['class'] = vertex_string.split('#')[0]
+    d['rid'] = '#' + vertex_string.replace('{', '#').split('#')[1]
+    return d
+
+
 class OrientDBConnection(object):
     """Class for interfacing with OrientDB via REST interface"""
     def __init__(self, orientdb_address='http://localhost',
@@ -290,7 +299,11 @@ class OrientDBConnection(object):
         request_url = '/'.join([
             self.server_address, 'document', self.database, record_id])
         response = requests.get(request_url, cookies=self.auth_cookie)
-        return response.json()
+        try:
+            out = response.json()
+        except ValueError:
+            out = {}
+        return out
 
     def post_command(self, command_text, language='sql'):
         """Executes a command against the database. In OrientDB, POST commands
@@ -379,7 +392,7 @@ class OrientDBConnection(object):
         response = requests.post(request_url, cookies=self.auth_cookie, data=payload)
         return response
 
-    def create_edge(self, source_id, target_id, subclass='E', content=None):
+    def create_edge(self, source_id, target_id, edge_subclass='E', content=None):
         """Creates an edge from the vertex with 'source_id' to the vertex
            with 'target_id'. If specified, the edge will in in class
            ``subclass`` and contain the document in the ``content``
@@ -391,11 +404,11 @@ class OrientDBConnection(object):
         if target_id[0] != '#':
             target_id = '#' + target_id
         command_text = 'create edge %s from %s to %s' % (
-            subclass, source_id, target_id)
+            edge_subclass, source_id, target_id)
         if content is not None:
             content = json.dumps(content)
             command_text = ' '.join([command_text, 'content', content])
-        print 'command:', command_text
+        # print 'command:', command_text
         response = self.post_command(command_text)
         return response
 
@@ -427,13 +440,15 @@ class OrientDBConnection(object):
 
     def vertex_connections(
             self, rid_vertex, edge_subclass='E', direction='in'):
-        """Yields all the vertices to or from (depending on direction)
+        """Yields all the edges to or from (depending on direction)
            the vertex with the given rid."""
         rid_vertex = _rid_format(rid_vertex)
         direction_field = '_'.join([direction, edge_subclass])
         where = "@rid=%s" % (rid_vertex)
-        for i in self.select_from('V', where):
-            i = i.get(direction_field, [])
+        for k in self.select_from('V', where):
+            # print k
+            i = k.get(direction_field, [])
+            # print 'vertex_connections --->', direction_field, i
             if i is None:
                 i = []
             elif isinstance(i, unicode) or isinstance(i, str):
@@ -444,16 +459,24 @@ class OrientDBConnection(object):
     def vertices_connected(
             self, rid_source, rid_target, edge_subclass='E'):
         """Returns a boolean, which is whether there is an edge connecting
-           the two vertices with the given rids.
+           the two vertices with the given ids.
         """
         rid_source = _rid_format(rid_source)
         rid_target = _rid_format(rid_target)
         sentinal = False
-        for connected_vertex in self.vertex_connections(
+        for outgoing_edge in self.vertex_connections(
                 rid_source, edge_subclass=edge_subclass, direction='out'):
-            if rid_target == connected_vertex:
+            # print '-->', outgoing_edge
+            # import pdb; pdb.set_trace()
+            try:
+                connected_vertex = _vertex_parse(self.get_document(outgoing_edge)[unicode('in')])['rid']
+            except KeyError:
+                continue
+            # print str(connected_vertex), str(rid_target)
+            if str(connected_vertex) == str(rid_target):
                 sentinal = True
                 break
+        # print rid_source, rid_target, sentinal
         return sentinal
 
 
@@ -465,8 +488,8 @@ def main():
     # _select_from(db_connection, target, where, skip=0):
     for i in orient_connection.vertex_connections('#12:39390', edge_subclass='in_category'):
         print i
-    print orient_connection.vertices_connected('#11:9845', '#13:60740', 'in_category')
-    print orient_connection.vertices_connected('#13:60740', '#11:9845', 'in_category')
+    print orient_connection.vertices_connected('#11:9845', '#13:60740', edge_subclass='in_category')
+    print orient_connection.vertices_connected('#13:60740', '#11:9845', edge_subclass='in_category')
     exit()
     print orient_connection.vertices_connected('#11:2619', '#12:5393')
     # _select_from(orient_connection, 'e', '''SELECT FROM E WHERE in = "#12:5393" AND out = "#11:2619"''')

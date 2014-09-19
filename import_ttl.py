@@ -11,7 +11,7 @@ import progressbar
 # add index creation to py2orientdb as a generic post command
 # create index in_category on in_category (in, out) notunique
 
-def import_ttl_file_edges(file_name, source_class, target_class, edge_class, test_only=False):
+def import_ttl_file_edges(file_name, source_class, target_class, edge_subclass, test_only=False):
     database_connection = py2orientdb.OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database='kb')
@@ -40,19 +40,19 @@ def import_ttl_file_edges(file_name, source_class, target_class, edge_class, tes
         source, edge, target, _ = line.split()
         source_set.add(source)
         target_set.add(target)
-        if counter % 100 == 0:
+        if counter % 5 == 0:
             pbar.update(counter)
     f.close()
     pbar.finish()
     counter = 0
     database_connection.create_vertex_class(source_class)
     database_connection.create_vertex_class(target_class)
-    database_connection.create_edge_class(edge_class)
+    database_connection.create_edge_class(edge_subclass)
     database_connection.create_class_property('uri', source_class, 'string')
     database_connection.create_class_property('uri', target_class, 'string')
-    database_connection.create_class_property('uri', edge_class, 'string')
-    database_connection.create_class_property('in', edge_class, 'string')
-    database_connection.create_class_property('out', edge_class, 'string')
+    database_connection.create_class_property('uri', edge_subclass, 'string')
+    database_connection.create_class_property('in', edge_subclass, 'string')
+    database_connection.create_class_property('out', edge_subclass, 'string')
     widgets = [
         'Creating source vertices: ', progressbar.Percentage(), ' ',
         progressbar.Bar('>'), ' ',
@@ -60,7 +60,7 @@ def import_ttl_file_edges(file_name, source_class, target_class, edge_class, tes
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(source_set)).start()
     for source in source_set:
         counter += 1
-        if counter % 100 == 0:
+        if counter % 5 == 0:
             pbar.update(counter)
         d = {'uri': source}
         database_connection.create_vertex(subclass=source_class, content=d, ignore=True)
@@ -73,12 +73,11 @@ def import_ttl_file_edges(file_name, source_class, target_class, edge_class, tes
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=len(target_set)).start()
     for target in target_set:
         counter += 1
-        if counter % 100 == 0:
+        if counter % 5 == 0:
             pbar.update(counter)
         d = {'uri': target}
         database_connection.create_vertex(subclass=target_class, content=d, ignore=True)
     pbar.finish()
-    return
     f = gzip.open(file_name, 'r')
     counter = 0
     widgets = [
@@ -88,7 +87,7 @@ def import_ttl_file_edges(file_name, source_class, target_class, edge_class, tes
     pbar = progressbar.ProgressBar(widgets=widgets, maxval=total_lines).start()
     for line in f:
         counter += 1
-        if counter % 100 == 0:
+        if counter % 5 == 0:
             pbar.update(counter)
         if line[0] == '#':
             continue
@@ -100,10 +99,9 @@ def import_ttl_file_edges(file_name, source_class, target_class, edge_class, tes
                 target_class, {'uri': target}))[0]['@rid']
         except:
             pass
-        if not database_connection.vertices_connected(source_rid, target_rid):
+        if not database_connection.vertices_connected(source_rid, target_rid, edge_subclass=edge_subclass):
             database_connection.create_edge(
-                source_rid, target_rid, subclass=edge_class,
-                content={'uri': edge})
+                source_rid, target_rid, edge_subclass=edge_subclass)
     pbar.finish()
 
 def import_ttl_file_document(file_name, category_alias):
