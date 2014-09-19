@@ -9,8 +9,9 @@ import progressbar
 # connect remote:localhost/kb root D5F8F36BB33B6B3171C7F479743E112235B0E475D4D3781ABF10705277419D55
 # orientdb {kb}> CREATE INDEX article_uri ON article (uri) dictionary_hash_index
 # add index creation to py2orientdb as a generic post command
+# create index in_category on in_category (in, out) notunique
 
-def import_ttl_file(file_name, source_class, target_class, edge_class, test_only=False):
+def import_ttl_file_edges(file_name, source_class, target_class, edge_class, test_only=False):
     database_connection = py2orientdb.OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database='kb')
@@ -50,6 +51,8 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
     database_connection.create_class_property('uri', source_class, 'string')
     database_connection.create_class_property('uri', target_class, 'string')
     database_connection.create_class_property('uri', edge_class, 'string')
+    database_connection.create_class_property('in', edge_class, 'string')
+    database_connection.create_class_property('out', edge_class, 'string')
     widgets = [
         'Creating source vertices: ', progressbar.Percentage(), ' ',
         progressbar.Bar('>'), ' ',
@@ -75,6 +78,7 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
         d = {'uri': target}
         database_connection.create_vertex(subclass=target_class, content=d, ignore=True)
     pbar.finish()
+    return
     f = gzip.open(file_name, 'r')
     counter = 0
     widgets = [
@@ -102,7 +106,21 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
                 content={'uri': edge})
     pbar.finish()
 
+def import_ttl_file_document(file_name, category_alias):
+    f = gzip.open(file_name, 'r')
+    for line in f:
+        if line[0] == '#':
+            continue
+        line_tokens = line.split()
+        vertex_uri = line_tokens[0]
+        category_uri = line_tokens[1]
+        data = ' '.join(line_tokens[2:])
+        print vertex_uri
+        print data
+        # check whether update_document method adds to the document or replaces it
+
 if __name__ == '__main__':
     import global_config as gc
-    import_ttl_file(gc.ARTICLE_CATEGORIES_FILE, 'article', 'category', 'in_category', test_only=False)
+    # import_ttl_file_document('./ttl/short_abstracts_en.ttl.gz', 'short_abstract')
+    import_ttl_file_edges(gc.ARTICLE_CATEGORIES_FILE, 'article', 'category', 'in_category', test_only=False)
 
