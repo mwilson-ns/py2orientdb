@@ -47,7 +47,7 @@ def _rid_format(rid):
     """Converts the ``rid`` as specified into a string of the form:
        #<cluster>:<id>.
     """
-    if isinstance(rid, str):
+    if isinstance(rid, str) or isinstance(rid, unicode):
         if rid[0] == '#':
             return rid
         else:
@@ -122,18 +122,22 @@ def _select_from(db_connection, target, where, skip=0):
        In these cases, there will always be a class method that calls
        the private method, and iterates through the results.
     """
-    # raw_query_text = 'SELECT FROM %s WHERE %s SKIP %s' % (
-    #     target, where_clause_dict, skip)
+    raw_query_text = 'SELECT FROM %s WHERE %s SKIP %s' % (
+            target, where, skip)
     # print raw_query_text
-    query_text = urllib2.quote(where)
+    query_text = urllib2.quote(raw_query_text)
     request_url = '/'.join([db_connection.server_address, 'query',
                             db_connection.database, 'sql', query_text])
     response = requests.get(request_url, cookies=db_connection.auth_cookie)
     try:
         result_list = response.json()['result']
+        # print '---------', result_list
     except ValueError as e:
-        print 'got a ValueError'
+        # print 'got a ValueError'
+        #import pdb; pdb.set_trace()
         result_list = []
+    # print raw_query_text
+    # print result_list
     return result_list
 
 
@@ -415,7 +419,7 @@ class OrientDBConnection(object):
         if content is not None:
             content = json.dumps(content)
             command_text = ' '.join([command_text, 'content', content])
-        print 'command:', command_text
+        # print 'command:', command_text
         response = self.post_command(command_text)
         return response
 
@@ -430,9 +434,9 @@ class OrientDBConnection(object):
         for k, v in additional_constraints.iteritems():
             payload[k] = v
         where = where_clause(payload)
-        query_text = """SELECT uri FROM %s WHERE %s""" % (subclass, where) 
+        # query_text = """SELECT uri FROM %s WHERE %s""" % (subclass, where) 
         # print 'vertex_connections query_text:', query_text
-        for i in self.select_from('e', query_text):
+        for i in self.select_from(subclass, where):
             yield i
 
     def vertices_connected(
@@ -441,6 +445,9 @@ class OrientDBConnection(object):
         """Returns a boolean, which is whether there is an edge connecting
            the two vertices with the given rids.
         """
+        # import pdb; pdb.set_trace()
+        rid_source = _rid_format(rid_source)
+        rid_target = _rid_format(rid_target)
         return not generator_empty(
             self.vertex_connections(
                 rid_source, rid_target, subclass=subclass,

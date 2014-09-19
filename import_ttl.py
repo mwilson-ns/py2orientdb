@@ -96,9 +96,10 @@ def import_ttl_file(file_name, source_class, target_class, edge_class, test_only
                 target_class, {'uri': target}))[0]['@rid']
         except:
             pass
-        database_connection.create_edge(
-            source_rid, target_rid, subclass=edge_class,
-            content={'uri': edge})
+        if not database_connection.vertices_connected(source_rid, target_rid):
+            database_connection.create_edge(
+                source_rid, target_rid, subclass=edge_class,
+                content={'uri': edge})
     pbar.finish()
 
 if __name__ == '__main__':
