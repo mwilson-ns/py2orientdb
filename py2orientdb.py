@@ -230,38 +230,63 @@ def _vertex_parse(vertex_string):
     return d
 
 
-class BatchTransaction(object):
-    """Class for performing bulk transactions. This will be part of
-       an OrientDBConnection object, to be initialized when the connection
-       object is.
-
-       We'll be using the script format that places each command as a
-       separate string in a list.
-    """
-    def __init__(self, language='sql', transaction=False,
-                 transaction_type='script', script=[], active=False,
+class OrientDBConnection(object):
+    """Class for interfacing with OrientDB via REST interface"""
+    def __init__(self, orientdb_address='http://localhost',
+                 orientdb_port=2480, password='', user='', database=None,
+                 to_base64=False, database_type='plocal',
+                 batch_language='sql', batch_transaction=False,
+                 batch_transaction_type='script', batch_active=False,
                  batch_size=100):
-        self.language = language
-        self.transaction = transaction
-        self.transaction_type = transaction_type
-        self.active = active
+        if database is None:
+            print 'Warning: no database specified.'
+            database = ''
+        orientdb_url = ':'.join([orientdb_address, str(orientdb_port)])
+        if to_base64:
+            import base64
+            password = base64.b64encode(password)
+        auth_url = '/'.join([orientdb_url, 'connect', database])
+        auth_response = requests.get(
+            auth_url, auth=requests.auth.HTTPBasicAuth(user, password))
+        if str(auth_response.status_code)[0] != '2':
+            raise AuthenticationError(
+                'Authentication failed. Got response %s.' % (str(
+                auth_response.status_code)))
+
+        self.auth_cookie = auth_response.cookies
+        self.auth_response = auth_response
+        self.password = password
+        self.user = user
+        self.orientdb_address = orientdb_address
+        self.orientdb_port = orientdb_port
+        self.database = database
+        self.to_base64 = to_base64
+        self.server_address = (self.orientdb_address + ':' + 
+            str(self.orientdb_port))
+        self.database_type = database_type
+
+        # Stuff relating to batch transactions
+        self.batch_language = batch_language
+        self.batch_transaction = batch_transaction
+        self.batch_transaction_type = batch_transaction_type
+        self.batch_active = batch_active
         self.batch_size = batch_size
-        self.script = script
+        self.batch_script = []
 
-    def activate(self):
-        self.active = True
+    def batch_activate(self):
+        self.batch_active = True
 
-    def deactivate(self):
-        self.active = False
+    def batch_deactivate(self):
+        self.batch_active = False
 
-    def trigger(self):
+    def batch_trigger(self):
         pass
 
-    def add_command(self, command):
-        self.script.append(command)
+    def add_batch_command(self, command):
+        self.batch_script.append(command)
         self.trigger()
 
-    def make_payload(self):
+    def make_batch_payload(self):
         """Creates a JSON blob to POST to the OrientDB server.
         
            We're limiting the payload to one operation in the
@@ -278,36 +303,14 @@ class BatchTransaction(object):
                 'script': self.script}] }
         return json.dumps(payload_dict)
 
-class OrientDBConnection(object):
-    """Class for interfacing with OrientDB via REST interface"""
-    def __init__(self, orientdb_address='http://localhost',
-                 orientdb_port=2480, password='', user='', database=None,
-                 to_base64=False, database_type='plocal'):
-        if database is None:
-            print 'Warning: no database specified.'
-            database = ''
-        orientdb_url = ':'.join([orientdb_address, str(orientdb_port)])
-        if to_base64:
-            import base64
-            password = base64.b64encode(password)
-        auth_url = '/'.join([orientdb_url, 'connect', database])
-        auth_response = requests.get(
-            auth_url, auth=requests.auth.HTTPBasicAuth(user, password))
-        if str(auth_response.status_code)[0] != '2':
-            raise AuthenticationError(
-                'Authentication failed. Got response %s.' % (str(
-                auth_response.status_code)))
-        self.auth_cookie = auth_response.cookies
-        self.auth_response = auth_response
-        self.password = password
-        self.user = user
-        self.orientdb_address = orientdb_address
-        self.orientdb_port = orientdb_port
-        self.database = database
-        self.to_base64 = to_base64
-        self.server_address = (self.orientdb_address + ':' + 
-            str(self.orientdb_port))
-        self.database_type = database_type
+    def flush_batch(self):
+        """Make a payload, execute a POST command. Wipe the batch object"""
+        payload = self.make_batch_payload()
+        request_url = '/'.join([self.server_address, 'batch',
+                                self.database])
+        response = requests.post(
+            request_url, cookies=self.auth_cookie, data=payload)
+        return response
 
     def database_info(self):
         """Returns information about the current database.
