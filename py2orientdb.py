@@ -230,6 +230,54 @@ def _vertex_parse(vertex_string):
     return d
 
 
+class BatchTransaction(object):
+    """Class for performing bulk transactions. This will be part of
+       an OrientDBConnection object, to be initialized when the connection
+       object is.
+
+       We'll be using the script format that places each command as a
+       separate string in a list.
+    """
+    def __init__(self, language='sql', transaction=False,
+                 transaction_type='script', script=[], active=False,
+                 batch_size=100):
+        self.language = language
+        self.transaction = transaction
+        self.transaction_type = transaction_type
+        self.active = active
+        self.batch_size = batch_size
+        self.script = script
+
+    def activate(self):
+        self.active = True
+
+    def deactivate(self):
+        self.active = False
+
+    def trigger(self):
+        pass
+
+    def add_command(self, command):
+        self.script.append(command)
+        self.trigger()
+
+    def make_payload(self):
+        """Creates a JSON blob to POST to the OrientDB server.
+        
+           We're limiting the payload to one operation in the
+           ``operations`` list. This has the effect of making
+           each batch object limited to one language and one
+           script. This is an arbitrary limitation that will be
+           lifted when we get to support for languages other than
+           SQL."""
+        payload_dict = { 'transaction': self.transaction,
+            'operations': [
+                {
+                'type': self.transaction_type,
+                'language': self.language,
+                'script': self.script}] }
+        return json.dumps(payload_dict)
+
 class OrientDBConnection(object):
     """Class for interfacing with OrientDB via REST interface"""
     def __init__(self, orientdb_address='http://localhost',
