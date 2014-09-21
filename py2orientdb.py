@@ -12,6 +12,13 @@ import global_config as gc # where I keep my passwords, etc.
 import json
 import copy
 
+"""
+create database remote:localhost/kb root D4908ADFA50843089D4100B7E28D1C23A156BE399E9A9997956F2F7828C8E02C plocal
+create index article_uri on article (uri) dictionary;
+create index category_uri on category (uri) dictionary;
+alter database custom useLightweightEdges=false;
+"""
+
 
 class AuthenticationError(Exception):
     """Error when the server doesn't accept the user's authentication.
@@ -34,11 +41,11 @@ class OrientDBResponseError(Exception):
         return repr(self.value)
 
 
-def generator_empty(g):
+def generator_empty(some_generator):
     """Returns True if the generator is empty; False otherwise.
        Note this consumes the first element of the generator!"""
     sentinal = True
-    for i in g:
+    for one_item in some_generator:
         sentinal = False
         break
     print 'generator_empty:', sentinal
@@ -125,21 +132,15 @@ def _select_from(db_connection, target, where, skip=0):
        the private method, and iterates through the results.
     """
     raw_query_text = 'SELECT FROM %s WHERE %s SKIP %s' % (
-            target, where, skip)
-    # print raw_query_text
+        target, where, skip)
     query_text = urllib2.quote(raw_query_text)
     request_url = '/'.join([db_connection.server_address, 'query',
                             db_connection.database, 'sql', query_text])
     response = requests.get(request_url, cookies=db_connection.auth_cookie)
     try:
         result_list = response.json()['result']
-        # print '---------', result_list
     except ValueError as e:
-        # print 'got a ValueError'
-        #import pdb; pdb.set_trace()
         result_list = []
-    # print raw_query_text
-    # print result_list
     return result_list
 
 
@@ -151,7 +152,6 @@ def _get_query(db_connection, query_text, language, skip=0):
 
        The ``query_text`` is being passed via the URL, so we
        might choke on ridiculously long queries.
-    
        TODO: Include support for an optional fetchPlan.
     """
     query_text = urllib2.quote(query_text)
@@ -200,6 +200,7 @@ def flatten_dict(document, record_separator='.'):
         d[key_path] = v
     return d
 
+
 def where_clause(document):
     """Takes a possibly nested dictionary and returns the "where" clause of
        a SQL command that matches the dictionary's key/value pairs.
@@ -213,11 +214,9 @@ def where_clause(document):
         if isinstance(v, str) or isinstance(v, unicode):
             v = '"' + v + '"'
         else:
-            # print v, 'is type', type(v)
             v = str(v)
         clause += '%s = %s AND ' % (k, v)
     clause = clause[:-5] # get rid of the extra comma and space
-    # clause = 'where ' + clause
     return clause
 
 
@@ -237,7 +236,7 @@ class OrientDBConnection(object):
                  to_base64=False, database_type='plocal',
                  batch_language='sql', batch_transaction=False,
                  batch_transaction_type='script', batch_active=False,
-                 batch_size=100):
+                 batch_size=1000):
         if database is None:
             print 'Warning: no database specified.'
             database = ''
@@ -251,7 +250,7 @@ class OrientDBConnection(object):
         if str(auth_response.status_code)[0] != '2':
             raise AuthenticationError(
                 'Authentication failed. Got response %s.' % (str(
-                auth_response.status_code)))
+                    auth_response.status_code)))
 
         self.auth_cookie = auth_response.cookies
         self.auth_response = auth_response
@@ -261,7 +260,7 @@ class OrientDBConnection(object):
         self.orientdb_port = orientdb_port
         self.database = database
         self.to_base64 = to_base64
-        self.server_address = (self.orientdb_address + ':' + 
+        self.server_address = (self.orientdb_address + ':' +
             str(self.orientdb_port))
         self.database_type = database_type
 
@@ -274,42 +273,54 @@ class OrientDBConnection(object):
         self.batch_script = []
 
     def batch_activate(self):
+        """Turn on batch processing for POST commands."""
         self.batch_active = True
 
     def batch_deactivate(self):
+        """Turn off batch processing for POST commands."""
         self.batch_active = False
 
     def batch_trigger(self):
-        pass
+        """Check whether we need to flush the batch."""
+        if len(self.batch_script) >= self.batch_size:
+            # print self.batch_script
+            self.flush_batch()
 
     def add_batch_command(self, command):
+        """We add the command to the batch and then check whether
+           the batch needs to be flushed.
+        """
         self.batch_script.append(command)
-        self.trigger()
+        self.batch_trigger()
 
     def make_batch_payload(self):
         """Creates a JSON blob to POST to the OrientDB server.
-        
+
            We're limiting the payload to one operation in the
            ``operations`` list. This has the effect of making
            each batch object limited to one language and one
            script. This is an arbitrary limitation that will be
            lifted when we get to support for languages other than
            SQL."""
-        payload_dict = { 'transaction': self.transaction,
+        payload_dict = { 'transaction': self.batch_transaction,
             'operations': [
                 {
-                'type': self.transaction_type,
-                'language': self.language,
-                'script': self.script}] }
+                'type': self.batch_transaction_type,
+                'language': self.batch_language,
+                'script': self.batch_script}] }
         return json.dumps(payload_dict)
 
     def flush_batch(self):
         """Make a payload, execute a POST command. Wipe the batch object"""
+        # payload = ['begin'] + self.batch_script + ['commit']
         payload = self.make_batch_payload()
+        # print payload
+        # import pdb; pdb.set_trace()
         request_url = '/'.join([self.server_address, 'batch',
                                 self.database])
         response = requests.post(
             request_url, cookies=self.auth_cookie, data=payload)
+        self.batch_script = []
         return response
 
     def database_info(self):
@@ -382,7 +393,7 @@ class OrientDBConnection(object):
                                 self.database])
         response = requests.get(request_url, cookies=self.auth_cookie)
         return response
-    
+
     def update_document(self, record_id, payload, update_mode='full'):
         """Updates a document by its record-id. Payload is a dictionary.
            Returns the response from the sever."""
@@ -420,10 +431,8 @@ class OrientDBConnection(object):
         """Creates a new class that extends the built-in Vertex class.
            Does not check whether it exists already.
         """
-        print 'creating vertex class:', class_name
         r = self.post_command('create class %s extends V' % (class_name))
-        # print r.content
-        # import pdb; pdb.set_trace()
+        return r
 
     def create_edge_class(self, class_name):
         """Creates a new class that extends the built-in Edge class
@@ -440,10 +449,12 @@ class OrientDBConnection(object):
         payload = copy.deepcopy(document)
         payload['@class'] = class_name
         payload = json.dumps(payload)
-        response = requests.post(request_url, cookies=self.auth_cookie, data=payload)
+        response = requests.post(
+            request_url, cookies=self.auth_cookie, data=payload)
         return response
 
-    def create_edge(self, source_id, target_id, edge_subclass='E', content=None):
+    def create_edge(self, source_id, target_id,
+                    edge_subclass='E', content=None):
         """Creates an edge from the vertex with 'source_id' to the vertex
            with 'target_id'. If specified, the edge will in in class
            ``subclass`` and contain the document in the ``content``
@@ -459,9 +470,13 @@ class OrientDBConnection(object):
         if content is not None:
             content = json.dumps(content)
             command_text = ' '.join([command_text, 'content', content])
-        # print 'command:', command_text
-        response = self.post_command(command_text)
-        return response
+        if self.batch_active: # Batch!
+            # print command_text
+            self.add_batch_command(command_text)
+        else:
+            response = self.post_command(command_text)
+            return response
+        return None
 
     def create_class_property(
         self, class_property, class_name, property_type):
@@ -473,8 +488,6 @@ class OrientDBConnection(object):
         response = requests.post(request_url, cookies=self.auth_cookie)
         return response
 
-    # TODO: Fill in routine to check whether vertex exists already
-    #       Use the "check_exists" method.
     def create_vertex(self, subclass='V', content=None, ignore=False):
         """Create a vertex with the given content. If ``ignore`` is set, then
            fail silently if there is already a vertex with the same content.
@@ -485,9 +498,12 @@ class OrientDBConnection(object):
         if content is not None:
             content = json.dumps(content)
             command_text = ' '.join([command_text, 'content', content])
-        # print 'command:', command_text
-        response = self.post_command(command_text)
-        return response
+        if self.batch_active: # Batch!
+            self.add_batch_command(command_text)
+        else:
+            response = self.post_command(command_text)
+            return response
+        return
 
     def vertex_connections(
             self, rid_vertex, edge_subclass='E', direction='in'):
@@ -497,9 +513,7 @@ class OrientDBConnection(object):
         direction_field = '_'.join([direction, edge_subclass])
         where = "@rid=%s" % (rid_vertex)
         for k in self.select_from('V', where):
-            # print k
             i = k.get(direction_field, [])
-            # print 'vertex_connections --->', direction_field, i
             if i is None:
                 i = []
             elif isinstance(i, unicode) or isinstance(i, str):
@@ -517,17 +531,14 @@ class OrientDBConnection(object):
         sentinal = False
         for outgoing_edge in self.vertex_connections(
                 rid_source, edge_subclass=edge_subclass, direction='out'):
-            # print '-->', outgoing_edge
-            # import pdb; pdb.set_trace()
             try:
-                connected_vertex = _vertex_parse(self.get_document(outgoing_edge)[unicode('in')])['rid']
+                connected_vertex = _vertex_parse(
+                    self.get_document(outgoing_edge)[unicode('in')])['rid']
             except KeyError:
                 continue
-            # print str(connected_vertex), str(rid_target)
             if str(connected_vertex) == str(rid_target):
                 sentinal = True
                 break
-        # print rid_source, rid_target, sentinal
         return sentinal
 
 
@@ -535,14 +546,17 @@ def main():
     orient_connection = OrientDBConnection(
         orientdb_address='http://localhost', orientdb_port=2480,
         user='root', password=gc.PASSWORD, database=gc.DATABASE)
+    orient_connection.add_batch_command('foobar')
+    orient_connection.batch_activate()
+
+    # import pdb; pdb.set_trace()
     # orient_connection.vertex_connections('11:2619', '12:5393')
     # _select_from(db_connection, target, where, skip=0):
-    for i in orient_connection.vertex_connections('#12:39390', edge_subclass='in_category'):
-        print i
-    print orient_connection.vertices_connected('#11:9845', '#13:60740', edge_subclass='in_category')
-    print orient_connection.vertices_connected('#13:60740', '#11:9845', edge_subclass='in_category')
-    exit()
-    print orient_connection.vertices_connected('#11:2619', '#12:5393')
+    #for i in orient_connection.vertex_connections('#12:39390', edge_subclass='in_category'):
+    #    print i
+    #print orient_connection.vertices_connected('#11:9845', '#13:60740', edge_subclass='in_category')
+    #print orient_connection.vertices_connected('#13:60740', '#11:9845', edge_subclass='in_category')
+    #print orient_connection.vertices_connected('#11:2619', '#12:5393')
     # _select_from(orient_connection, 'e', '''SELECT FROM E WHERE in = "#12:5393" AND out = "#11:2619"''')
     # exit()
     # for i in orient_connection.select_from('v', "type = 'artist'"):
@@ -550,10 +564,10 @@ def main():
         # document = orient_connection.get_document(i['@rid'])
         # print document
     # import pdb; pdb.set_trace()
-    experiment_payload = {
-        'foo': 'baz', u'name': u'Willie_Cobb', u'type': u'artist',
-        u'@rid': u'#9:807', u'in_written_by': u'#9:806', u'@version': 4,
-        u'@type': u'd', u'@class': u'V'}
+    #experiment_payload = {
+    #    'foo': 'baz', u'name': u'Willie_Cobb', u'type': u'artist',
+    #    u'@rid': u'#9:807', u'in_written_by': u'#9:806', u'@version': 4,
+    #    u'@type': u'd', u'@class': u'V'}
     # w = where_clause(experiment_payload)
     # import pdb; pdb.set_trace()
     # orient_connection.update_document('#9:806', experiment_payload)
