@@ -1,7 +1,8 @@
 """
 Module for interfacing with OrientDB from Python 2.7. The motivation for
 this project is to have a very simple client that doesn't rely on
-the Tinkerpop stack, and just uses the SQL-like language for OrientDB.
+the Tinkerpop stack, and just uses the SQL-like language for OrientDB, but
+still enables graph transversals and other cool things.
 """
 
 import requests
@@ -23,7 +24,7 @@ alter database custom useLightweightEdges=false;
 class AuthenticationError(Exception):
     """Error when the server doesn't accept the user's authentication.
        This will contain more information in the future -- just a
-       placeholder for now.
+       stub for now.
     """
     def __init__(self, value):
         self.value = value
@@ -33,7 +34,7 @@ class AuthenticationError(Exception):
 
 class OrientDBResponseError(Exception):
     """Error when the OrientDB server doesn't give us a 2XX response
-       code.
+       code. Just a stub for now.
     """
     def __init__(self, value):
         self.value = value
@@ -43,7 +44,10 @@ class OrientDBResponseError(Exception):
 
 def generator_empty(some_generator):
     """Returns True if the generator is empty; False otherwise.
-       Note this consumes the first element of the generator!"""
+       Warning: this consumes the first element of the generator!
+       :param some_generator: Any iterable, but this function only
+           makes sense if it's a generator.
+       :rtype: ``bool``"""
     sentinal = True
     for one_item in some_generator:
         sentinal = False
@@ -55,6 +59,8 @@ def generator_empty(some_generator):
 def _rid_format(rid):
     """Converts the ``rid`` as specified into a string of the form:
        #<cluster>:<id>.
+       :param rid: The record identifier in any (reasonable) form
+       :rtype: A ``string`` in the right format for passing to OrientDB
     """
     if isinstance(rid, str) or isinstance(rid, unicode):
         if rid[0] == '#':
@@ -78,6 +84,12 @@ def _paginate(f, *args):
        It will cause the function to be executed repeatedly, skipping the
        number of documents that have been yielded already. The function
        decorated must have a 'skip=0' default argument.
+
+       :param f: Any funtion that returns a (possibly empty) list of
+          results. The function must accept a ``skip`` kwarg that takes
+          an integer, representing the number of records we've seen
+          already.
+       :rtype: ``function``
     """
     def inner_function(*args):
         counter = 0
@@ -93,7 +105,7 @@ def _paginate(f, *args):
 def _check_response_code(f, *args, **kwargs):
     """Decorator that checks the requests response to see if the response
        code is in the 200's, signifying that all is well. If not, raises
-       an OrientDBResponseError.
+       an OrientDBResponseError. This is just a stub for now.
     """
     def inner_function(*args, **kwargs):
         out = f(*args, **kwargs)
@@ -108,8 +120,13 @@ def _check_response_code(f, *args, **kwargs):
 
 @_check_response_code
 def _update_document(db_connection, record_id, payload, update_mode='full'):
-    """Updates a document by its record-id. Payload is a dictionary.
-       Returns the response from the sever."""
+    """Updates a document by its record-id. Payload is a dictionary, which
+       willl be converted to JSON (and hence, must be serializable).
+       :param db_connection: A ``py2orient`` connection object
+       :param record_id: The document rid, in the right format
+       :param payload: a JSON-serializable dictionary
+       :param update_mode: Either ``full`` or ``partial`` (not used yet)
+       :rtype: A urllib2 response object."""
     record_id = record_id.replace('#', '')
     payload = json.dumps(payload)
     request_url = '/'.join([
@@ -318,8 +335,10 @@ class OrientDBConnection(object):
         # import pdb; pdb.set_trace()
         request_url = '/'.join([self.server_address, 'batch',
                                 self.database])
+        # print payload
         response = requests.post(
             request_url, cookies=self.auth_cookie, data=payload)
+        # import pdb; pdb.set_trace()
         self.batch_script = []
         return response
 
@@ -453,6 +472,17 @@ class OrientDBConnection(object):
             request_url, cookies=self.auth_cookie, data=payload)
         return response
 
+    def merge_document(self, to_merge, where_clause_dict, target_class='V'):
+        """Merges the to_merge dictionary into objects picked out
+           by the where_clause_dict.
+        """
+        where_string = where_clause(where_clause_dict)
+        payload = json.dumps(to_merge)
+        merge_command = """update %s merge %s where %s""" % (
+            target_class, payload, where_string)
+        self.post_command(merge_command)
+
+
     def create_edge(self, source_id, target_id,
                     edge_subclass='E', content=None):
         """Creates an edge from the vertex with 'source_id' to the vertex
@@ -498,6 +528,7 @@ class OrientDBConnection(object):
         if content is not None:
             content = json.dumps(content)
             command_text = ' '.join([command_text, 'content', content])
+            # print command_text
         if self.batch_active: # Batch!
             self.add_batch_command(command_text)
         else:
